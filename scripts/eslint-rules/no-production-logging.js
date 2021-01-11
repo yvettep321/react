@@ -9,77 +9,74 @@
 
 'use strict';
 
-module.exports = {
-  meta: {
-    fixable: 'code',
-  },
-  create: function(context) {
-    function isInDEVBlock(node) {
-      let done = false;
-      while (!done) {
-        let parent = node.parent;
-        if (!parent) {
-          return false;
+const LOGGER_FN_NAMES = [
+  'warning',
+  'warningWithoutStack',
+  'lowPriorityWarning',
+  'lowPriorityWarningWithoutStack',
+];
+const DEV_EXPRESSION = '__DEV__';
+
+module.exports = function(context) {
+  function traverseIf(node) {
+    switch (node.type) {
+      case 'Identifier':
+        return [node.name];
+      case 'LogicalExpression':
+        if (node.operator === '&&') {
+          return [...traverseIf(node.left), ...traverseIf(node.right)];
         }
-        if (
-          parent.type === 'IfStatement' &&
-          node === parent.consequent &&
-          parent.test.type === 'Identifier' &&
-          // This is intentionally strict so we can
-          // see blocks of DEV-only code at once.
-          parent.test.name === '__DEV__'
-        ) {
-          return true;
-        }
-        node = parent;
+        return [];
+      default:
+        return [];
+    }
+  }
+
+  function hasIfInParents(node) {
+    let done = false;
+    while (!done) {
+      if (!node.parent) {
+        return false;
+      }
+      node = node.parent;
+      if (
+        node.type === 'IfStatement' &&
+        traverseIf(node.test).includes(DEV_EXPRESSION)
+      ) {
+        return true;
       }
     }
+  }
 
-    function reportWrapInDEV(node) {
-      context.report({
-        node: node,
-        message: `Wrap console.{{identifier}}() in an "if (__DEV__) {}" check`,
-        data: {
-          identifier: node.property.name,
-        },
-        fix: function(fixer) {
-          return [
-            fixer.insertTextBefore(node.parent, `if (__DEV__) {`),
-            fixer.insertTextAfter(node.parent, '}'),
-          ];
-        },
-      });
-    }
-
-    function reportUnexpectedConsole(node) {
-      context.report({
-        node: node,
-        message: `Unexpected use of console`,
-      });
-    }
-
-    return {
-      MemberExpression: function(node) {
-        if (
-          node.object.type === 'Identifier' &&
-          node.object.name === 'console' &&
-          node.property.type === 'Identifier'
-        ) {
-          switch (node.property.name) {
-            case 'error':
-            case 'warn': {
-              if (!isInDEVBlock(node)) {
-                reportWrapInDEV(node);
-              }
-              break;
-            }
-            default: {
-              reportUnexpectedConsole(node);
-              break;
-            }
-          }
-        }
+  function report(node) {
+    context.report({
+      node: node,
+      message: `We don't emit warnings in production builds. Wrap {{identifier}}() in an "if (${DEV_EXPRESSION}) {}" check`,
+      data: {
+        identifier: node.callee.name,
       },
-    };
-  },
+      fix: function(fixer) {
+        return [
+          fixer.insertTextBefore(node.parent, `if (${DEV_EXPRESSION}) {`),
+          fixer.insertTextAfter(node.parent, '}'),
+        ];
+      },
+    });
+  }
+
+  const isLoggerFunctionName = name => LOGGER_FN_NAMES.includes(name);
+
+  return {
+    meta: {
+      fixable: 'code',
+    },
+    CallExpression: function(node) {
+      if (!isLoggerFunctionName(node.callee.name)) {
+        return;
+      }
+      if (!hasIfInParents(node)) {
+        report(node);
+      }
+    },
+  };
 };

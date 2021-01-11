@@ -7,9 +7,7 @@
  * @flow
  */
 
-import type {ElementRef} from 'react';
 import type {
-  HostComponent,
   MeasureInWindowOnSuccessCallback,
   MeasureLayoutOnSuccessCallback,
   MeasureOnSuccessCallback,
@@ -30,31 +28,32 @@ import {
   warnForStyleProps,
 } from './NativeMethodsMixinUtils';
 
+import warningWithoutStack from 'shared/warningWithoutStack';
+
+/**
+ * This component defines the same methods as NativeMethodsMixin but without the
+ * findNodeHandle wrapper. This wrapper is unnecessary for HostComponent views
+ * and would also result in a circular require.js dependency (since
+ * ReactNativeFiber depends on this component and NativeMethodsMixin depends on
+ * ReactNativeFiber).
+ */
 class ReactNativeFiberHostComponent {
   _children: Array<Instance | number>;
   _nativeTag: number;
-  _internalFiberInstanceHandleDEV: Object;
   viewConfig: ReactNativeBaseComponentViewConfig<>;
 
-  constructor(
-    tag: number,
-    viewConfig: ReactNativeBaseComponentViewConfig<>,
-    internalInstanceHandleDEV: Object,
-  ) {
+  constructor(tag: number, viewConfig: ReactNativeBaseComponentViewConfig<>) {
     this._nativeTag = tag;
     this._children = [];
     this.viewConfig = viewConfig;
-    if (__DEV__) {
-      this._internalFiberInstanceHandleDEV = internalInstanceHandleDEV;
-    }
   }
 
   blur() {
-    TextInputState.blurTextInput(this);
+    TextInputState.blurTextInput(this._nativeTag);
   }
 
   focus() {
-    TextInputState.focusTextInput(this);
+    TextInputState.focusTextInput(this._nativeTag);
   }
 
   measure(callback: MeasureOnSuccessCallback) {
@@ -72,7 +71,7 @@ class ReactNativeFiberHostComponent {
   }
 
   measureLayout(
-    relativeToNativeNode: number | ElementRef<HostComponent<mixed>>,
+    relativeToNativeNode: number | ReactNativeFiberHostComponent,
     onSuccess: MeasureLayoutOnSuccessCallback,
     onFail?: () => void /* currently unused */,
   ) {
@@ -81,16 +80,14 @@ class ReactNativeFiberHostComponent {
     if (typeof relativeToNativeNode === 'number') {
       // Already a node handle
       relativeNode = relativeToNativeNode;
-    } else {
-      const nativeNode: ReactNativeFiberHostComponent = (relativeToNativeNode: any);
-      if (nativeNode._nativeTag) {
-        relativeNode = nativeNode._nativeTag;
-      }
+    } else if (relativeToNativeNode._nativeTag) {
+      relativeNode = relativeToNativeNode._nativeTag;
     }
 
     if (relativeNode == null) {
       if (__DEV__) {
-        console.error(
+        warningWithoutStack(
+          false,
           'Warning: ref.measureLayout must be called with a node handle or a ref to a native component.',
         );
       }

@@ -8,6 +8,7 @@
 /* eslint valid-typeof: 0 */
 
 import invariant from 'shared/invariant';
+import warningWithoutStack from 'shared/warningWithoutStack';
 
 const EVENT_POOL_SIZE = 10;
 
@@ -76,8 +77,6 @@ function SyntheticEvent(
   this.dispatchConfig = dispatchConfig;
   this._targetInst = targetInst;
   this.nativeEvent = nativeEvent;
-  this._dispatchListeners = null;
-  this._dispatchInstances = null;
 
   const Interface = this.constructor.Interface;
   for (const propName in Interface) {
@@ -259,6 +258,13 @@ addEventPoolingTo(SyntheticEvent);
  * @return {object} defineProperty object
  */
 function getPooledWarningPropertyDefinition(propName, getVal) {
+  const isFunction = typeof getVal === 'function';
+  return {
+    configurable: true,
+    set: set,
+    get: get,
+  };
+
   function set(val) {
     const action = isFunction ? 'setting the method' : 'setting the property';
     warn(action, 'This is effectively a no-op');
@@ -277,32 +283,23 @@ function getPooledWarningPropertyDefinition(propName, getVal) {
   }
 
   function warn(action, result) {
+    const warningCondition = false;
     if (__DEV__) {
-      console.error(
+      warningWithoutStack(
+        warningCondition,
         "This synthetic event is reused for performance reasons. If you're seeing this, " +
           "you're %s `%s` on a released/nullified synthetic event. %s. " +
           'If you must keep the original synthetic event around, use event.persist(). ' +
-          'See https://reactjs.org/link/event-pooling for more information.',
+          'See https://fb.me/react-event-pooling for more information.',
         action,
         propName,
         result,
       );
     }
   }
-  const isFunction = typeof getVal === 'function';
-  return {
-    configurable: true,
-    set: set,
-    get: get,
-  };
 }
 
-function createOrGetPooledEvent(
-  dispatchConfig,
-  targetInst,
-  nativeEvent,
-  nativeInst,
-) {
+function getPooledEvent(dispatchConfig, targetInst, nativeEvent, nativeInst) {
   const EventConstructor = this;
   if (EventConstructor.eventPool.length) {
     const instance = EventConstructor.eventPool.pop();
@@ -336,8 +333,8 @@ function releasePooledEvent(event) {
 }
 
 function addEventPoolingTo(EventConstructor) {
-  EventConstructor.getPooled = createOrGetPooledEvent;
   EventConstructor.eventPool = [];
+  EventConstructor.getPooled = getPooledEvent;
   EventConstructor.release = releasePooledEvent;
 }
 
