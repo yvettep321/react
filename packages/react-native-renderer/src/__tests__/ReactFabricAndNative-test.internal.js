@@ -16,42 +16,20 @@ let ReactNative;
 let UIManager;
 let createReactNativeComponentClass;
 
-describe('created with ReactFabric called with ReactNative', () => {
+describe('ReactFabric', () => {
   beforeEach(() => {
     jest.resetModules();
-    require('react-native/Libraries/ReactPrivate/InitializeNativeFabricUIManager');
     ReactNative = require('react-native-renderer');
+    UIManager = require('UIManager');
     jest.resetModules();
-    UIManager = require('react-native/Libraries/ReactPrivate/ReactNativePrivateInterface')
-      .UIManager;
     jest.mock('shared/ReactFeatureFlags', () =>
       require('shared/forks/ReactFeatureFlags.native-oss'),
     );
 
     React = require('react');
     ReactFabric = require('react-native-renderer/fabric');
-    createReactNativeComponentClass = require('react-native/Libraries/ReactPrivate/ReactNativePrivateInterface')
-      .ReactNativeViewConfigRegistry.register;
-  });
-
-  it('find Fabric instances with the RN renderer', () => {
-    const View = createReactNativeComponentClass('RCTView', () => ({
-      validAttributes: {title: true},
-      uiViewClassName: 'RCTView',
-    }));
-
-    const ref = React.createRef();
-
-    class Component extends React.Component {
-      render() {
-        return <View title="foo" />;
-      }
-    }
-
-    ReactFabric.render(<Component ref={ref} />, 11);
-
-    const instance = ReactNative.findHostInstance_DEPRECATED(ref.current);
-    expect(instance._nativeTag).toBe(2);
+    createReactNativeComponentClass = require('ReactNativeViewConfigRegistry')
+      .register;
   });
 
   it('find Fabric nodes with the RN renderer', () => {
@@ -60,7 +38,7 @@ describe('created with ReactFabric called with ReactNative', () => {
       uiViewClassName: 'RCTView',
     }));
 
-    const ref = React.createRef();
+    let ref = React.createRef();
 
     class Component extends React.Component {
       render() {
@@ -70,105 +48,28 @@ describe('created with ReactFabric called with ReactNative', () => {
 
     ReactFabric.render(<Component ref={ref} />, 11);
 
-    const handle = ReactNative.findNodeHandle(ref.current);
+    let handle = ReactNative.findNodeHandle(ref.current);
     expect(handle).toBe(2);
   });
 
-  it('dispatches commands on Fabric nodes with the RN renderer', () => {
-    nativeFabricUIManager.dispatchCommand.mockClear();
+  it('sets native props with setNativeProps on Fabric nodes with the RN renderer', () => {
+    UIManager.updateView.mockReset();
     const View = createReactNativeComponentClass('RCTView', () => ({
       validAttributes: {title: true},
       uiViewClassName: 'RCTView',
     }));
 
-    const ref = React.createRef();
+    let ref = React.createRef();
 
     ReactFabric.render(<View title="bar" ref={ref} />, 11);
-    expect(nativeFabricUIManager.dispatchCommand).not.toBeCalled();
-    ReactNative.dispatchCommand(ref.current, 'myCommand', [10, 20]);
-    expect(nativeFabricUIManager.dispatchCommand).toHaveBeenCalledTimes(1);
-    expect(
-      nativeFabricUIManager.dispatchCommand,
-    ).toHaveBeenCalledWith(expect.any(Object), 'myCommand', [10, 20]);
-    expect(UIManager.dispatchViewManagerCommand).not.toBeCalled();
-  });
-});
-
-describe('created with ReactNative called with ReactFabric', () => {
-  beforeEach(() => {
-    jest.resetModules();
-    require('react-native/Libraries/ReactPrivate/InitializeNativeFabricUIManager');
-    ReactFabric = require('react-native-renderer/fabric');
-    jest.resetModules();
-    UIManager = require('react-native/Libraries/ReactPrivate/ReactNativePrivateInterface')
-      .UIManager;
-    jest.mock('shared/ReactFeatureFlags', () =>
-      require('shared/forks/ReactFeatureFlags.native-oss'),
+    expect(UIManager.updateView).not.toBeCalled();
+    ReactNative.setNativeProps(ref.current, {title: 'baz'});
+    expect(UIManager.updateView).toHaveBeenCalledTimes(1);
+    expect(UIManager.updateView).toHaveBeenCalledWith(
+      expect.any(Number),
+      'RCTView',
+      {title: 'baz'},
     );
-    ReactNative = require('react-native-renderer');
-
-    React = require('react');
-    createReactNativeComponentClass = require('react-native/Libraries/ReactPrivate/ReactNativePrivateInterface')
-      .ReactNativeViewConfigRegistry.register;
   });
 
-  it('find Paper instances with the Fabric renderer', () => {
-    const View = createReactNativeComponentClass('RCTView', () => ({
-      validAttributes: {title: true},
-      uiViewClassName: 'RCTView',
-    }));
-
-    const ref = React.createRef();
-
-    class Component extends React.Component {
-      render() {
-        return <View title="foo" />;
-      }
-    }
-
-    ReactNative.render(<Component ref={ref} />, 11);
-
-    const instance = ReactFabric.findHostInstance_DEPRECATED(ref.current);
-    expect(instance._nativeTag).toBe(3);
-  });
-
-  it('find Paper nodes with the Fabric renderer', () => {
-    const View = createReactNativeComponentClass('RCTView', () => ({
-      validAttributes: {title: true},
-      uiViewClassName: 'RCTView',
-    }));
-
-    const ref = React.createRef();
-
-    class Component extends React.Component {
-      render() {
-        return <View title="foo" />;
-      }
-    }
-
-    ReactNative.render(<Component ref={ref} />, 11);
-
-    const handle = ReactFabric.findNodeHandle(ref.current);
-    expect(handle).toBe(3);
-  });
-
-  it('dispatches commands on Paper nodes with the Fabric renderer', () => {
-    UIManager.dispatchViewManagerCommand.mockReset();
-    const View = createReactNativeComponentClass('RCTView', () => ({
-      validAttributes: {title: true},
-      uiViewClassName: 'RCTView',
-    }));
-
-    const ref = React.createRef();
-
-    ReactNative.render(<View title="bar" ref={ref} />, 11);
-    expect(UIManager.dispatchViewManagerCommand).not.toBeCalled();
-    ReactFabric.dispatchCommand(ref.current, 'myCommand', [10, 20]);
-    expect(UIManager.dispatchViewManagerCommand).toHaveBeenCalledTimes(1);
-    expect(
-      UIManager.dispatchViewManagerCommand,
-    ).toHaveBeenCalledWith(expect.any(Number), 'myCommand', [10, 20]);
-
-    expect(nativeFabricUIManager.dispatchCommand).not.toBeCalled();
-  });
 });

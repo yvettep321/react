@@ -7,7 +7,7 @@
  * @flow
  */
 
-import type {ReactNativeType, HostComponent} from './ReactNativeTypes';
+import type {ReactNativeType} from './ReactNativeTypes';
 import type {ReactNodeList} from 'shared/ReactTypes';
 
 import './ReactNativeInjection';
@@ -16,9 +16,8 @@ import {
   findHostInstance,
   findHostInstanceWithWarning,
   batchedUpdates as batchedUpdatesImpl,
-  batchedEventUpdates,
-  discreteUpdates,
-  flushDiscreteUpdates,
+  interactiveUpdates,
+  flushInteractiveUpdates,
   createContainer,
   updateContainer,
   injectIntoDevTools,
@@ -30,70 +29,22 @@ import {createPortal} from 'shared/ReactPortal';
 import {
   setBatchingImplementation,
   batchedUpdates,
-} from 'legacy-events/ReactGenericBatching';
+} from 'events/ReactGenericBatching';
 import ReactVersion from 'shared/ReactVersion';
 // Module provided by RN:
-import {UIManager} from 'react-native/Libraries/ReactPrivate/ReactNativePrivateInterface';
+import UIManager from 'UIManager';
 
 import NativeMethodsMixin from './NativeMethodsMixin';
 import ReactNativeComponent from './ReactNativeComponent';
 import {getClosestInstanceFromNode} from './ReactNativeComponentTree';
 import {getInspectorDataForViewTag} from './ReactNativeFiberInspector';
+import {setNativeProps} from './ReactNativeSetNativeProps';
 
-import {LegacyRoot} from 'shared/ReactRootTags';
 import ReactSharedInternals from 'shared/ReactSharedInternals';
 import getComponentName from 'shared/getComponentName';
 import warningWithoutStack from 'shared/warningWithoutStack';
 
 const ReactCurrentOwner = ReactSharedInternals.ReactCurrentOwner;
-
-function findHostInstance_DEPRECATED(
-  componentOrHandle: any,
-): ?React$ElementRef<HostComponent<mixed>> {
-  if (__DEV__) {
-    const owner = ReactCurrentOwner.current;
-    if (owner !== null && owner.stateNode !== null) {
-      warningWithoutStack(
-        owner.stateNode._warnedAboutRefsInRender,
-        '%s is accessing findNodeHandle inside its render(). ' +
-          'render() should be a pure function of props and state. It should ' +
-          'never access something that requires stale data from the previous ' +
-          'render, such as refs. Move this logic to componentDidMount and ' +
-          'componentDidUpdate instead.',
-        getComponentName(owner.type) || 'A component',
-      );
-
-      owner.stateNode._warnedAboutRefsInRender = true;
-    }
-  }
-  if (componentOrHandle == null) {
-    return null;
-  }
-  if (componentOrHandle._nativeTag) {
-    return componentOrHandle;
-  }
-  if (componentOrHandle.canonical && componentOrHandle.canonical._nativeTag) {
-    return componentOrHandle.canonical;
-  }
-  let hostInstance;
-  if (__DEV__) {
-    hostInstance = findHostInstanceWithWarning(
-      componentOrHandle,
-      'findHostInstance_DEPRECATED',
-    );
-  } else {
-    hostInstance = findHostInstance(componentOrHandle);
-  }
-
-  if (hostInstance == null) {
-    return hostInstance;
-  }
-  if ((hostInstance: any).canonical) {
-    // Fabric
-    return (hostInstance: any).canonical;
-  }
-  return hostInstance;
-}
 
 function findNodeHandle(componentOrHandle: any): ?number {
   if (__DEV__) {
@@ -147,9 +98,8 @@ function findNodeHandle(componentOrHandle: any): ?number {
 
 setBatchingImplementation(
   batchedUpdatesImpl,
-  discreteUpdates,
-  flushDiscreteUpdates,
-  batchedEventUpdates,
+  interactiveUpdates,
+  flushInteractiveUpdates,
 );
 
 function computeComponentStackForErrorReporting(reactTag: number): string {
@@ -165,25 +115,9 @@ const roots = new Map();
 const ReactNativeRenderer: ReactNativeType = {
   NativeComponent: ReactNativeComponent(findNodeHandle, findHostInstance),
 
-  // This is needed for implementation details of TouchableNativeFeedback
-  // Remove this once TouchableNativeFeedback doesn't use cloneElement
-  findHostInstance_DEPRECATED,
   findNodeHandle,
 
-  dispatchCommand(handle: any, command: string, args: Array<any>) {
-    if (handle._nativeTag == null) {
-      if (__DEV__) {
-        warningWithoutStack(
-          handle._nativeTag != null,
-          "dispatchCommand was called with a ref that isn't a " +
-            'native component. Use React.forwardRef to get access to the underlying native component',
-        );
-      }
-      return;
-    }
-
-    UIManager.dispatchViewManagerCommand(handle._nativeTag, command, args);
-  },
+  setNativeProps,
 
   render(element: React$Element<any>, containerTag: any, callback: ?Function) {
     let root = roots.get(containerTag);
@@ -191,7 +125,7 @@ const ReactNativeRenderer: ReactNativeType = {
     if (!root) {
       // TODO (bvaughn): If we decide to keep the wrapper component,
       // We could create a wrapper for containerTag as well to reduce special casing.
-      root = createContainer(containerTag, LegacyRoot, false, null);
+      root = createContainer(containerTag, false, false);
       roots.set(containerTag, root);
     }
     updateContainer(element, root, null, callback);
